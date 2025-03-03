@@ -1,0 +1,254 @@
+---
+title: "Part B Report R MarkDown"
+date: "2024-05-30"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = T)
+```
+
+```{r}
+library(dplyr)
+library(ggplot2)
+library(tidyverse)
+library(patchwork)
+library(dplyr)
+
+Experiment_Data <- read.csv("/Users/joel/Desktop/Uni/MXB242/Part B Report/DATA.csv")
+#Experiment_Data <- read.csv("/Part B Report/DATA.csv")
+df <- Experiment_Data %>% select(c("Font","Display","TextColour","Time"))
+head(df)
+```
+
+## Exploratory Visualisations: Box Plots
+```{r}
+library(patchwork)
+library(tidyverse)
+
+
+# BoxPlot: Reading Time ~ 
+plot1 <- ggplot(data = df) +
+  geom_boxplot(aes(y = Time))  +
+  xlab("Reponse Variable") + ylab("Reading Time (seconds)") + theme_bw() + 
+  ylim(8.5, 30) +
+  scale_y_continuous(breaks = seq(8.5, 30, by = 1)) 
+
+#BoxPlot: Reading Time ~ Font Type
+plot2 <- ggplot(data = df) +
+  geom_boxplot(aes(x= as.factor(Font), y = Time)) +
+  xlab("Font Type") + ylab("Reading Time (seconds)") + theme_bw() + 
+  ylim(8.5, 30) +
+  scale_y_continuous(breaks = seq(8.5, 30, by = 1)) 
+
+#BoxPlot: Reading Time ~ Display Type
+plot3 <- ggplot(data = df) +
+  geom_boxplot(aes(x= as.factor(Display), y = Time)) + 
+  xlab("Display Type") + ylab("Reading Time (seconds)") + theme_bw()  + 
+  ylim(8.5, 30) +
+  scale_y_continuous(breaks = seq(8.5, 30, by = 1))
+
+#BoxPlot: Reading Time ~ Colour Combination
+plot4 <- ggplot(data = df) +
+  geom_boxplot(aes(x= as.factor(TextColour), y = Time)) +
+ xlab("Colour Combination") + ylab("Reading Time (seconds)") + theme_bw() + 
+  ylim(8.5, 30) +
+  scale_y_continuous(breaks = seq(8.5, 30, by = 1)) 
+
+grid1 <- (plot1 + plot2) / (plot3 + plot4)
+grid1
+ 
+```
+
+## Exploratory Visualisations: Interaction Plots
+```{r}
+library(patchwork)
+library(tidyverse)
+
+#ScatterPlot: Reading Time ~ Font Type w/ colour = Display 
+summarized_data <- df %>%
+  group_by(Font, Display) %>%
+  summarize(avg_time = mean(Time), .groups = "drop") 
+plot7 <- ggplot(data = summarized_data) +
+  geom_point(aes(x = Font, y = avg_time, color = Display)) +
+  geom_line(aes(x = Font, y = avg_time, color = Display, group = Display)) +  # Adds the lines connecting the points
+  xlab("Font Type") + ylab(" Reading Time (seconds)") +
+  labs( color = "Display Type") + theme_bw() 
+
+
+#ScatterPlot: Reading Time ~ Font Type w/ colour = Text Colour 
+summarized_data <- df %>%
+  group_by(Font, TextColour) %>%
+  summarize(avg_time = mean(Time), .groups = "drop") 
+plot8 <- ggplot(data = summarized_data) +
+  geom_point(aes(x = Font, y = avg_time, color = TextColour)) +
+  geom_line(aes(x = Font, y = avg_time, color = TextColour, group = TextColour)) +  # Adds the lines connecting the points
+  xlab("Font Type") + ylab(" Reading Time (seconds)") +
+  labs( color = "Text Colour") + theme_bw() 
+
+
+#ScatterPlot: Reading Time ~ Display Type Type w/ colour = Text Colour 
+summarized_data <- df %>%
+  group_by(Display, TextColour) %>%
+  summarize(avg_time = mean(Time), .groups = "drop") 
+plot9 <- ggplot(data = summarized_data) +
+  geom_point(aes(x = Display, y = avg_time, color = TextColour)) +
+  geom_line(aes(x = Display, y = avg_time, color = TextColour, group = TextColour)) + 
+  xlab("Display Type") + ylab(" Reading Time (seconds)")  + labs(color = "Text Colour") + theme_bw()
+
+
+grid <- (plot7 + plot8 + plot9)
+grid
+```
+
+## ANOVA 
+```{r}
+library(tidyverse)
+
+#setting each of the predictor variables as factors
+df$Font <- factor(df$Font)
+df$Display <- factor(df$Display)
+df$TextColour <- factor(df$TextColour)
+
+#calling the ANOVA function, using the 'full' model that includes all interactions. 
+df.aov <- aov(Time ~ Font * Display * TextColour, data = df)
+summary(df.aov)
+```
+
+## Initial Linear Model
+```{r}
+library(tidyverse)
+
+#calling the Linear Regression function, using the 'full' model that includes all interactions 
+df.lm <- lm(Time ~ Font * Display * TextColour, data = df)
+#summary stats about the model 
+summary(df.lm)
+```
+
+## Unusual Observations
+```{r}
+library(tidyverse)
+#creating the linear model from prior 
+df.lm <- lm(Time ~ Font * Display * TextColour, data = df)
+#number of coefficients used excluding intercept within linear model (rows in the summary table excluding interecept)
+k <- 11 
+#number of observations within experimental data
+n <- NROW(df)
+#setting the linear model as matrix 
+X <- model.matrix(df.lm)
+
+#defining unusual observation variable that contains "leverage, standardised, studenised, cooks distance matrixs
+Unusual_Observations <- data.frame(leverage = hat(X),
+standardised = rstandard(df.lm),
+studentised = rstudent(df.lm),
+cooks = cooks.distance(df.lm))
+
+#querying the matrix on conditions for each check 
+which(Unusual_Observations$leverage>((2*(k+1))/n))
+which(abs(Unusual_Observations$standardised)>2)
+which(abs(Unusual_Observations$studentised)>2)
+which(Unusual_Observations$cooks>1)
+
+#alternative code from tutorial to identify unusual observation
+# UnusualObservations <- data.frame(leverage = hat(X),
+#                                   standardised = rstandard(df.lm),
+#                                   studentised = rstudent(df.lm),
+#                                   cooks = cooks.distance(df.lm))
+# #leverage point
+# which(UnusualObservations$leverage>(2*(k+1)/n))
+# #standardised test
+# which(abs(UnusualObservations$standardised)>2)
+# #studentised test
+# which(abs(UnusualObservations$studentised)>2)
+# #cooks distance
+# which(UnusualObservations$cooks>1)
+```
+
+## Initial Linear Model & Assumption Plots
+```{r}
+#calling libraries that will be used
+library(patchwork)
+library(tidyverse)
+
+#creating initial 'Full" linear model with Time as response & all covariates as predictors.
+df.lm <- lm(Time ~ Font * Display * TextColour, data = df)
+summary(df.lm)
+
+#Residual Plot: Fitted Values ~ Residuals 
+plot1a <- ggplot(data = df.lm) +
+  geom_point(aes(x = df.lm$fitted.values, y = df.lm$residuals)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  xlab("Fitted Values") +
+  ylab("Residuals") +
+  theme_bw()
+
+#Residual Plot: Font Type ~ Residuals 
+plot2a <- ggplot(data = df.lm) +
+  geom_point(aes(x = df$Font, y = df.lm$residuals)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  xlab("Font Type") +
+  ylab("Residuals") +
+  theme_bw()
+
+#Residual Plot: Display Type ~ Residuals 
+plot3a <- ggplot(data = df.lm) +
+  geom_point(aes(x = df$Display, y = df.lm$residuals)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  xlab("Display Type") +
+  ylab("Residuals") +
+  theme_bw()
+
+#Residual Plot: Colour ~ Residuals 
+plot4a <- ggplot(data = df.lm) +
+  geom_point(aes(x = df$TextColour, y = df.lm$residuals)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "blue") +
+  xlab("Colour Combination") +
+  ylab("Residuals") +
+  theme_bw()
+
+#Independence Plot: Line Graph Observation Order 
+plot5a <- ggplot(data = df.lm) +
+  geom_line(aes(x = seq_along(df.lm$residuals), y = df.lm$residuals)) +
+  geom_hline(yintercept = 0, color = "blue") +
+  xlab("Observation Number") +
+  ylab("Residuals") + 
+  theme_bw()
+
+#Residual Plot: Histogram Residual Distribution
+plot6a <- ggplot(data = df.lm) +
+  geom_histogram(aes(x = df.lm$residuals)) +
+  xlab("Residuals") +
+  ylab("Frequency") +
+  theme_bw()
+
+#QQ Plot: Normality Distribution
+plot7a <- ggplot(data = data.frame(residuals = df.lm$residuals), aes(sample = df.lm$residuals)) +
+  stat_qq() +
+  stat_qq_line(color = "blue") +
+  xlab("Theoretical Quantiles") +
+  ylab("Sample Quantiles") +
+  theme_bw()
+
+grid1 <- (plot1a + plot2a + plot3a + plot4a) #/ 
+grid2 <- ( plot5a + plot6a) / ( plot7a)
+grid1
+grid2
+```
+
+## Final Linear Model: Stepwise Approach 
+```{r}
+library(tidyverse)
+
+#Stepwise Regression: "Backward" .: starting from 'full' with all interactions and removing predictors to reduce AIC metric.
+df.lm.StepWiseBackward <- step(lm(df$Time ~ df$Font * df$Display * df$TextColour), direction = "backward")
+final.model <- df.lm.StepWiseBackward
+summary(final.model)
+
+#Stepwise Regression: "Forward" .: starting with no predictors and then adding to reduce AIC metric 
+df.lm.StepWiseForward <- step(lm(df$Time ~1), scope = list(lower = ~1, upper = ~df$Font * df$Display * df$TextColour), 
+                        direction = "forward")
+final.model <- df.lm.StepWiseBackward
+summary(final.model)
+```
